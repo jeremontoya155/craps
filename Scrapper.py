@@ -1,207 +1,199 @@
+import tkinter as tk
+from tkinter import ttk, filedialog
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import re
-import tkinter as tk
-from tkinter import filedialog
-from openpyxl import Workbook
-from openpyxl import load_workbook  
 
-# Función para obtener productos y precios de Farmacia Red
-# def obtener_productos_farmacia_red(num_paginas=50):
-#     resultados_farmacia_red = []
 
-#     urls_farmacia_red = [
-#         "https://farmaciasred.com.ar/collections/dermocosmetica",
-#         "https://farmaciasred.com.ar/collections/maquillaje",
-#         "https://farmaciasred.com.ar/collections/perfumes-y-fragancias",
-#         "https://farmaciasred.com.ar/collections/cuidado-personal"
-#     ]
+class ScrapingApp:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Scraping y Exportación")
+        self.master.geometry("500x400")
+        self.master.resizable(False, False)
 
-#     for url_categoria in urls_farmacia_red:
-#         for pagina in range(1, num_paginas + 1):
-#             url_pagina = f"{url_categoria}?page={pagina}"
-#             response_pagina = requests.get(url_pagina)
+        # Creamos un estilo para el fondo del LabelFrame
+        self.style = ttk.Style()
+        self.style.configure("Background.TFrame", background="#f0f0f0")
 
-#             if response_pagina.status_code == 200:
-#                 soup_pagina = BeautifulSoup(response_pagina.text, 'html.parser')
-#                 productos = soup_pagina.find_all('h2', class_='productitem--title')
-                
-#                 # Modificación: Buscar los precios dentro de cada producto
-#                 for producto in productos:
-#                     nombre_producto = producto.find('a').text.strip()
+        # Variables de control
+        self.check_farmacia_red = tk.BooleanVar()
+        self.check_farmacia_lider = tk.BooleanVar()
+        self.check_farmacia_general_paz = tk.BooleanVar()
+        self.check_super_mami = tk.BooleanVar()
+        self.num_pages_entry = None
+        self.status_label = None
 
-#                     # Buscar el contenedor que incluye tanto el título como el precio
-#                     contenedor_producto = producto.find_parent('div', class_='productitem--content')
+        # Encabezado
+        self.header_label = ttk.Label(self.master, text="Scraping y Exportación", font=("Helvetica", 20))
+        self.header_label.pack(pady=20)
 
-#                     # Verificar si se encontró el contenedor del producto
-#                     if contenedor_producto:
-#                         # Buscar el precio dentro del contenedor del producto
-#                         precio_span = contenedor_producto.find('span', class_='money')
+        # Sección de opciones
+        self.options_frame = ttk.LabelFrame(self.master,  style="Background.TFrame")
+        self.options_frame.pack(pady=10, padx=20, fill=tk.BOTH, expand=True)
 
-#                         if precio_span:
-#                             precio_producto = re.sub('[^\d,]', '', precio_span.text)  # Eliminar caracteres no numéricos excepto ',' (coma)
-#                             precio_producto = precio_producto.replace(',', '.')  # Reemplazar ',' (coma) con '.' (punto) para formateo numérico
-                            
-#                             # Verificar si la cadena no está vacía antes de convertirla a número flotante
-#                             if precio_producto:
-#                                 precio_producto = float(precio_producto)
-#                                 resultados_farmacia_red.append([nombre_producto, precio_producto])
+        ttk.Label(self.options_frame, text="Seleccione los sitios a escrapear:").grid(row=0, column=0, columnspan=2, pady=10, sticky="w")
 
-#     return resultados_farmacia_red
-   
+        self.check_farmacia_red_button = ttk.Checkbutton(self.options_frame, text="Farmacia Red", variable=self.check_farmacia_red)
+        self.check_farmacia_red_button.grid(row=1, column=0, pady=5, sticky="w")
 
-# Función para obtener productos y precios de Farmacia Líder
-def obtener_productos_farmacia_lider(num_paginas=15):
-    resultados_farmacia_lider = []
+        self.check_farmacia_lider_button = ttk.Checkbutton(self.options_frame, text="Farmacia Líder", variable=self.check_farmacia_lider)
+        self.check_farmacia_lider_button.grid(row=2, column=0, pady=5, sticky="w")
 
-    urls_farmacia_lider = [
-        "https://farmaciaslider.com.ar/10-dermocosmetica",
-        "https://farmaciaslider.com.ar/12-cuidado-e-higiene-personal",
-        "https://farmaciaslider.com.ar/21-perfumes-y-fragancias",
-        "https://farmaciaslider.com.ar/14-maquillaje",
-        "https://farmaciaslider.com.ar/70-nutricion"
-    ]
+        self.check_farmacia_general_paz_button = ttk.Checkbutton(self.options_frame, text="Farmacia General Paz", variable=self.check_farmacia_general_paz)
+        self.check_farmacia_general_paz_button.grid(row=3, column=0, pady=5, sticky="w")
 
-    for url_categoria in urls_farmacia_lider:
+        self.check_super_mami_button = ttk.Checkbutton(self.options_frame, text="Super Mami", variable=self.check_super_mami)
+        self.check_super_mami_button.grid(row=4, column=0, pady=5, sticky="w")
+
+        ttk.Label(self.options_frame, text="Número de páginas a escrapear:").grid(row=1, column=1, pady=10, padx=20, sticky="w")
+
+        self.num_pages_entry = ttk.Entry(self.options_frame)
+        self.num_pages_entry.grid(row=1, column=2, padx=10, pady=10, sticky="ew")
+
+        # Botón de acción
+        self.scrape_button = ttk.Button(self.master, text="INICIAR EXTRACCION DE DATOS", command=self.realizar_scraping_y_exportar)
+        self.scrape_button.pack(pady=20)
+
+        # Mensaje de estado
+        self.status_label = ttk.Label(self.master, text="", font=("Helvetica", 12))
+        self.status_label.pack(pady=10)
+
+    def realizar_scraping_y_exportar(self):
+        resultados = {}
+
+        if self.check_farmacia_red.get():
+            resultados['Farmacia Red'] = self.obtener_productos_farmacia_red(int(self.num_pages_entry.get()))
+        if self.check_farmacia_lider.get():
+            resultados['Farmacia Líder'] = self.obtener_productos_farmacia_lider(int(self.num_pages_entry.get()))
+        if self.check_farmacia_general_paz.get():
+            resultados['Farmacia General Paz'] = self.obtener_productos_farmacia_general_paz(int(self.num_pages_entry.get()))
+        if self.check_super_mami.get():
+            resultados['Super Mami'] = self.obtener_productos_super_mami(int(self.num_pages_entry.get()))
+
+        nombre_archivo = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Archivos de Excel", "*.xlsx")])
+        self.exportar_a_excel(resultados, nombre_archivo)
+        self.status_label.config(text=f"Resultados exportados a {nombre_archivo}")
+
+    def obtener_productos_farmacia_red(self, num_paginas=50):
+        resultados_farmacia_red = []
+
         for pagina in range(1, num_paginas + 1):
-            url_pagina = f"{url_categoria}?page={pagina}"
+            url_pagina = f"https://www.farmaciasred.com.ar/shop?page={pagina}"
             response_pagina = requests.get(url_pagina)
 
             if response_pagina.status_code == 200:
                 soup_pagina = BeautifulSoup(response_pagina.text, 'html.parser')
-                productos = soup_pagina.find_all('h3', class_='h3 product-title')
-                precios = soup_pagina.find_all('span', class_='product-price')
+                productos = soup_pagina.find_all('div', class_='product-list-item')
 
-                for producto, precio in zip(productos, precios):
-                    nombre_producto = producto.text.strip()
-                    precio_producto = precio.text.strip()
-                    resultados_farmacia_lider.append([nombre_producto, precio_producto])
+                for producto in productos:
+                    nombre_producto = producto.find('span', class_='child-top').text.strip()
 
-    return resultados_farmacia_lider
+                    # Buscar el precio dentro del contenedor del producto
+                    precio_span = producto.find('span', class_='amount')
 
-# Función para obtener productos de Farmacia General Paz
-def obtener_productos_farmacia_general_paz(num_paginas=50):
-    resultados_farmacia_general_paz = []
+                    if precio_span:
+                        # Extraer el texto del precio y eliminar espacios en blanco
+                        precio_texto = precio_span.text.strip()
+                        # Utilizar expresiones regulares para extraer solo el valor numérico
+                        precio_producto = re.search(r'\d+(\.\d+)?', precio_texto).group()
+                        resultados_farmacia_red.append([nombre_producto, precio_producto])
 
-    urls_farmacia_general_paz = [
-        "https://www.farmaciageneralpaz.com/shop/dermocosmetica-PC1155",
-        "https://www.farmaciageneralpaz.com/shop/perfumes-PC1156",
-        "https://www.farmaciageneralpaz.com/shop/maquillajes",
-        "https://www.farmaciageneralpaz.com/shop/cuidado-personal-PC8877"
-    ]
+        return resultados_farmacia_red
 
-    for url_categoria in urls_farmacia_general_paz:
+    def obtener_productos_farmacia_lider(self, num_paginas=15):
+        resultados_farmacia_lider = []
+
+        urls_farmacia_lider = [
+            "https://farmaciaslider.com.ar/10-dermocosmetica",
+            "https://farmaciaslider.com.ar/12-cuidado-e-higiene-personal",
+            "https://farmaciaslider.com.ar/21-perfumes-y-fragancias",
+            "https://farmaciaslider.com.ar/14-maquillaje",
+            "https://farmaciaslider.com.ar/70-nutricion"
+        ]
+
+        for url_categoria in urls_farmacia_lider:
+            for pagina in range(1, num_paginas + 1):
+                url_pagina = f"{url_categoria}?page={pagina}"
+                response_pagina = requests.get(url_pagina)
+
+                if response_pagina.status_code == 200:
+                    soup_pagina = BeautifulSoup(response_pagina.text, 'html.parser')
+                    productos = soup_pagina.find_all('h3', class_='h3 product-title')
+                    precios = soup_pagina.find_all('span', class_='product-price')
+
+                    for producto, precio in zip(productos, precios):
+                        nombre_producto = producto.text.strip()
+                        precio_producto = precio.text.strip()
+                        resultados_farmacia_lider.append([nombre_producto, precio_producto])
+
+        return resultados_farmacia_lider
+
+    def obtener_productos_farmacia_general_paz(self, num_paginas=50):
+        resultados_farmacia_general_paz = []
+
+        urls_farmacia_general_paz = [
+            "https://www.farmaciasred.com.ar/shop/dermocosmetica-PC35459",
+            "https://www.farmaciageneralpaz.com/shop/perfumes-PC1156",
+            "https://www.farmaciageneralpaz.com/shop/maquillajes",
+            "https://www.farmaciageneralpaz.com/shop/cuidado-personal-PC8877"
+        ]
+
+        for url_categoria in urls_farmacia_general_paz:
+            for pagina in range(1, num_paginas + 1):
+                url_pagina = f"{url_categoria}?pagina={pagina}"
+                response_pagina = requests.get(url_pagina)
+
+                if response_pagina.status_code == 200:
+                    soup_pagina = BeautifulSoup(response_pagina.text, 'html.parser')
+                    nombres_productos_pagina = soup_pagina.find_all('h3', class_='kw-details-title')
+                    precios_pagina = soup_pagina.find_all('span', class_='amount')
+
+                    for nombre, precio in zip(nombres_productos_pagina, precios_pagina):
+                        nombre_producto = nombre.find('span', class_='child-top').get_text().strip()
+                        precio_producto = precio.get_text().strip()
+                        resultados_farmacia_general_paz.append([nombre_producto, precio_producto])
+
+        return resultados_farmacia_general_paz
+
+    def obtener_productos_super_mami(self, num_paginas=65):
+        resultados_super_mami = []
+
         for pagina in range(1, num_paginas + 1):
-            url_pagina = f"{url_categoria}?pagina={pagina}"
+            url_pagina = f"https://www.dinoonline.com.ar/super/categoria/supermami-perfumeria/_/N-146amvi?No={pagina * 36}&Nrpp=36"
             response_pagina = requests.get(url_pagina)
 
             if response_pagina.status_code == 200:
                 soup_pagina = BeautifulSoup(response_pagina.text, 'html.parser')
-                nombres_productos_pagina = soup_pagina.find_all('h3', class_='kw-details-title')
-                precios_pagina = soup_pagina.find_all('span', class_='amount')
+                nombres_productos_pagina = soup_pagina.find_all('div', class_='description limitRow tooltipHere')
+                precios_pagina = soup_pagina.find_all('div', class_='precio-unidad')
 
                 for nombre, precio in zip(nombres_productos_pagina, precios_pagina):
-                    nombre_producto = nombre.find('span', class_='child-top').get_text().strip()
-                    precio_producto = precio.get_text().strip()
-                    resultados_farmacia_general_paz.append([nombre_producto, precio_producto])
+                    nombre_producto = nombre.get_text().strip()
+                    precio_producto = precio.find('span').get_text().strip()
+                    resultados_super_mami.append([nombre_producto, precio_producto])
 
-    return resultados_farmacia_general_paz
+        return resultados_super_mami
 
-# Función para obtener productos de Super Mami
-def obtener_productos_super_mami(num_paginas=65):
-    resultados_super_mami = []
+    def exportar_a_excel(self, resultados, nombre_archivo):
+        if resultados:
+            with pd.ExcelWriter(nombre_archivo, engine='openpyxl') as writer:
+                for origen, data in resultados.items():
+                    df = pd.DataFrame(data, columns=["Nombre del Producto", "Precio"])
+                    df['Origen'] = origen  # Agregar una columna 'Origen' con el nombre del origen
+                    df.to_excel(writer, sheet_name=origen, index=False)
 
-    for pagina in range(1, num_paginas + 1):
-        url_pagina = f"https://www.dinoonline.com.ar/super/categoria/supermami-perfumeria/_/N-146amvi?No={pagina * 36}&Nrpp=36"
-        response_pagina = requests.get(url_pagina)
+                # Agregar una hoja adicional con todos los productos y su origen
+                df_all = pd.concat([pd.DataFrame(data, columns=["Nombre del Producto", "Precio"]).assign(Origen=origen) for origen, data in resultados.items()], ignore_index=True)
+                df_all.to_excel(writer, sheet_name='Todos los Productos', index=False)
 
-        if response_pagina.status_code == 200:
-            soup_pagina = BeautifulSoup(response_pagina.text, 'html.parser')
-            nombres_productos_pagina = soup_pagina.find_all('div', class_='description limitRow tooltipHere')
-            precios_pagina = soup_pagina.find_all('div', class_='precio-unidad')
 
-            for nombre, precio in zip(nombres_productos_pagina, precios_pagina):
-                nombre_producto = nombre.get_text().strip()
-                precio_producto = precio.find('span').get_text().strip()
-                resultados_super_mami.append([nombre_producto, precio_producto])
+def main():
+    root = tk.Tk()
+    app = ScrapingApp(root)
+    root.mainloop()
 
-    return resultados_super_mami
 
-# Función para exportar resultados a un archivo Excel
-def exportar_a_excel(resultados, nombre_archivo):
-    if resultados:
-        with pd.ExcelWriter(nombre_archivo, engine='openpyxl') as writer:
-            for origen, data in resultados.items():
-                df = pd.DataFrame(data, columns=["Nombre del Producto", "Precio"])
-                df['Origen'] = origen  # Agregar una columna 'Origen' con el nombre del origen
-                df.to_excel(writer, sheet_name=origen, index=False)
-            
-            # Agregar una hoja adicional con todos los productos y su origen
-            df_all = pd.concat([pd.DataFrame(data, columns=["Nombre del Producto", "Precio"]).assign(Origen=origen) for origen, data in resultados.items()], ignore_index=True)
-            df_all.to_excel(writer, sheet_name='Todos los Productos', index=False)
-
-# Función para realizar scraping y exportación
-def realizar_scraping_y_exportar():
-    resultados = {}
-
-#    if check_farmacia_red.get():
-#        resultados['Farmacia Red'] = obtener_productos_farmacia_red(int(entry_farmacia_red.get()))
-    if check_farmacia_lider.get():
-        resultados['Farmacia Líder'] = obtener_productos_farmacia_lider(int(entry_farmacia_lider.get()))
-    if check_farmacia_general_paz.get():
-        resultados['Farmacia General Paz'] = obtener_productos_farmacia_general_paz(int(entry_farmacia_general_paz.get()))
-    if check_super_mami.get():
-        resultados['Super Mami'] = obtener_productos_super_mami(int(entry_super_mami.get()))
-
-    nombre_archivo = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Archivos de Excel", "*.xlsx")])
-    exportar_a_excel(resultados, nombre_archivo)
-    mensaje.config(text=f"Resultados exportados a {nombre_archivo}")
-
-# Crear la ventana principal de tkinter
-root = tk.Tk()
-root.title("Scraping y Exportación")
-
-# Variables para controlar la selección de sitios
-#check_farmacia_red = tk.BooleanVar()
-check_farmacia_lider = tk.BooleanVar()
-check_farmacia_general_paz = tk.BooleanVar()
-check_super_mami = tk.BooleanVar()
-
-# Crear y configurar elementos de la interfaz
-label_paginas = tk.Label(root, text="Número de Páginas:")
-#label_farmacia_red = tk.Label(root, text="Farmacia Red")
-label_farmacia_lider = tk.Label(root, text="Farmacia Líder")
-label_farmacia_general_paz = tk.Label(root, text="Farmacia General Paz")
-label_super_mami = tk.Label(root, text="Super Mami")
-#entry_farmacia_red = tk.Entry(root)
-entry_farmacia_lider = tk.Entry(root)
-entry_farmacia_general_paz = tk.Entry(root)
-entry_super_mami = tk.Entry(root)
-boton_realizar_scraping = tk.Button(root, text="Realizar Scraping y Exportar", command=realizar_scraping_y_exportar)
-mensaje = tk.Label(root, text="Resultados")
-
-#check_red = tk.Checkbutton(root, variable=check_farmacia_red)
-check_lider = tk.Checkbutton(root, variable=check_farmacia_lider)
-check_paz = tk.Checkbutton(root, variable=check_farmacia_general_paz)
-check_mami = tk.Checkbutton(root, variable=check_super_mami)
-
-# Colocar elementos en la ventana
-label_paginas.grid(row=0, column=0)
-#label_farmacia_red.grid(row=1, column=1)
-label_farmacia_lider.grid(row=2, column=1)
-label_farmacia_general_paz.grid(row=3, column=1)
-label_super_mami.grid(row=4, column=1)
-#entry_farmacia_red.grid(row=1, column=2)
-entry_farmacia_lider.grid(row=2, column=2)
-entry_farmacia_general_paz.grid(row=3, column=2)
-entry_super_mami.grid(row=4, column=2)
-boton_realizar_scraping.grid(row=6, column=1, columnspan=2)
-mensaje.grid(row=7, column=1, columnspan=2)
-#check_red.grid(row=1, column=0)
-check_lider.grid(row=2, column=0)
-check_paz.grid(row=3, column=0)
-check_mami.grid(row=4, column=0)
-
-# Iniciar la interfaz de usuario
-root.mainloop()
+if __name__ == "__main__":
+    main()
